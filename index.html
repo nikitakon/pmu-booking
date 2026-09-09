@@ -804,9 +804,17 @@ function onBlockSubmit(e) {
     data.endTime = null;
   }
   errBox.style.display = 'none';
-  db.collection('blocks').add(data);
-  state.showBlockForm = false;
-  render();
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  db.collection('blocks').add(data).then(() => {
+    state.showBlockForm = false;
+    render();
+  }).catch(err => {
+    errBox.textContent = 'Не удалось сохранить: ' + err.message;
+    errBox.style.display = 'block';
+    submitBtn.disabled = false;
+    console.error('blocks add error', err);
+  });
 }
 
 render();
