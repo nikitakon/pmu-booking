@@ -220,6 +220,7 @@ let state = {
   tab: 'today',
   services: [],
   appointments: [],
+  blocks: [],
   selectedDate: todayStr(),
   showAddForm: false,
   editingApptId: null,
@@ -228,6 +229,7 @@ let state = {
   editingServiceId: null,
   statsMonth: todayStr().slice(0, 7),
   clientSort: 'recent',
+  showBlockForm: false,
 };
 
 /* ---------- Firestore live sync ---------- */
@@ -241,6 +243,11 @@ if (db) {
     state.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     render();
   }, err => console.error('appointments sync error', err));
+
+  db.collection('blocks').orderBy('date').onSnapshot(snap => {
+    state.blocks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }, err => console.error('blocks sync error', err));
 }
 
 /* ---------- derived data ---------- */
@@ -344,9 +351,10 @@ function render() {
       <button class="tab-btn ${state.tab === 'stats' ? 'active' : ''}" data-action="tab" data-tab="stats">Статистика</button>
       <button class="tab-btn ${state.tab === 'services' ? 'active' : ''}" data-action="tab" data-tab="services">Услуги и цены</button>
       <button class="tab-btn ${state.tab === 'archive' ? 'active' : ''}" data-action="tab" data-tab="archive">Архив</button>
+      <button class="tab-btn ${state.tab === 'blocks' ? 'active' : ''}" data-action="tab" data-tab="blocks">Выходные</button>
     </nav>
     ${renderReminders()}
-    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : state.tab === 'stats' ? renderStats() : state.tab === 'archive' ? renderArchive() : renderServices()}</main>
+    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : state.tab === 'stats' ? renderStats() : state.tab === 'archive' ? renderArchive() : state.tab === 'blocks' ? renderBlocks() : renderServices()}</main>
   `;
   attachListeners();
 }
@@ -376,6 +384,7 @@ function renderReminders() {
 function renderToday() {
   const dayAppts = getDayAppointments();
   const revenue = getDayRevenue(dayAppts);
+  const dayBlock = state.blocks.find(b => b.date === state.selectedDate && b.allDay);
   return `
     <div class="date-nav">
       <button class="icon-btn" data-action="prev-day" aria-label="Предыдущий день">‹</button>
@@ -386,6 +395,7 @@ function renderToday() {
       <button class="icon-btn" data-action="next-day" aria-label="Следующий день">›</button>
       <button class="link-btn" data-action="today">Сегодня</button>
     </div>
+    ${dayBlock ? `<div class="reminder-banner" style="border-color:var(--warn);"><p class="reminder-title" style="margin:0;">🚫 Этот день закрыт для клиентов${dayBlock.note ? ' — ' + esc(dayBlock.note) : ''}</p></div>` : ''}
     <div class="stats-row">
       <div class="stat-card"><div class="stat-label">Записей</div><div class="stat-value">${dayAppts.length}</div></div>
       <div class="stat-card"><div class="stat-label">Ожидаемый доход</div><div class="stat-value">${formatMoney(revenue)}</div></div>
@@ -568,6 +578,65 @@ function renderArchive() {
   }).join('');
 }
 
+function renderBlocks() {
+  const today = todayStr();
+  const upcoming = state.blocks.filter(b => b.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const past = state.blocks.filter(b => b.date < today);
+  return `
+    <p class="appt-detail-muted" style="margin-bottom:16px;">Закройте день целиком (отпуск, выходной) или только пару часов — клиенты не смогут выбрать это время в форме записи.</p>
+    ${!state.showBlockForm ? `<button class="btn-primary" data-action="show-add-block">+ Закрыть дату</button>` : renderBlockForm()}
+    <div style="margin-top:20px;">
+      ${upcoming.length === 0 && !state.showBlockForm ? `
+        <div class="empty-state"><p class="empty-title">Закрытых дат нет</p><p class="empty-body">Все дни открыты для записи клиентов.</p></div>`
+        : upcoming.map(renderBlockRow).join('')}
+    </div>
+    ${past.length > 0 ? `<p class="appt-detail-muted" style="margin:20px 0 8px;">Прошедшие (можно удалить)</p>${past.map(renderBlockRow).join('')}` : ''}
+  `;
+}
+
+function renderBlockRow(b) {
+  return `
+    <div class="service-row" style="border-left-color:var(--warn);">
+      <div style="flex:1;">
+        <div class="appt-client">${esc(new Date(b.date + 'T00:00:00').toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' }))}</div>
+        <div class="appt-detail-muted">${b.allDay ? 'Весь день' : `${esc(b.startTime)}–${esc(b.endTime)}`}${b.note ? ' · ' + esc(b.note) : ''}</div>
+      </div>
+      <div class="appt-actions">
+        <button class="text-action" data-action="delete-block" data-id="${b.id}">Удалить</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderBlockForm() {
+  return `
+    <form class="form-card" id="block-form">
+      <div class="form-grid">
+        <div><label class="field-label">Дата</label><input type="date" name="date" min="${todayStr()}" required /></div>
+        <div>
+          <label class="field-label">Что закрыть</label>
+          <select name="mode" id="block-mode-input">
+            <option value="allday">Весь день</option>
+            <option value="hours">Несколько часов</option>
+          </select>
+        </div>
+        <div class="wide" id="block-hours-fields" style="display:none;">
+          <div class="form-grid">
+            <div><label class="field-label">С</label><input type="time" name="startTime" value="10:00" /></div>
+            <div><label class="field-label">До</label><input type="time" name="endTime" value="12:00" /></div>
+          </div>
+        </div>
+        <div class="wide"><label class="field-label">Заметка (необязательно)</label><input type="text" name="note" placeholder="Отпуск, личные дела и т.д." /></div>
+      </div>
+      <div class="error-text" id="block-error" style="display:none;"></div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Закрыть</button>
+        <button type="button" class="btn-secondary" data-action="cancel-block-form">Отмена</button>
+      </div>
+    </form>
+  `;
+}
+
 function renderServices() {
   return `
     ${(!state.showServiceForm && !state.editingServiceId) ? `<button class="btn-primary" data-action="show-add-service">+ Новая услуга</button>` : ''}
@@ -616,17 +685,22 @@ function renderServiceForm() {
 
 /* ---------- events ---------- */
 function attachListeners() {
-  const app = document.getElementById('app');
   const datePicker = document.getElementById('date-picker');
   if (datePicker) datePicker.addEventListener('change', e => { state.selectedDate = e.target.value; render(); });
   const statsMonthPicker = document.getElementById('stats-month-picker');
   if (statsMonthPicker) statsMonthPicker.addEventListener('change', e => { if (e.target.value) { state.statsMonth = e.target.value; render(); } });
-  app.addEventListener('click', onClick);
   const apptForm = document.getElementById('appt-form');
   if (apptForm) apptForm.addEventListener('submit', onApptSubmit);
   const serviceForm = document.getElementById('service-form');
   if (serviceForm) serviceForm.addEventListener('submit', onServiceSubmit);
+  const blockForm = document.getElementById('block-form');
+  if (blockForm) blockForm.addEventListener('submit', onBlockSubmit);
+  const blockModeInput = document.getElementById('block-mode-input');
+  if (blockModeInput) blockModeInput.addEventListener('change', e => {
+    document.getElementById('block-hours-fields').style.display = e.target.value === 'hours' ? 'block' : 'none';
+  });
 }
+document.getElementById('app').addEventListener('click', onClick);
 
 function onClick(e) {
   const el = e.target.closest('[data-action]');
@@ -643,6 +717,9 @@ function onClick(e) {
   else if (action === 'delete-appt') { db.collection('appointments').doc(el.dataset.id).update({ archived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() }); }
   else if (action === 'restore-appt') { db.collection('appointments').doc(el.dataset.id).update({ archived: false }); }
   else if (action === 'delete-forever') { if (confirm('Удалить запись навсегда? Это действие нельзя отменить.')) db.collection('appointments').doc(el.dataset.id).delete(); }
+  else if (action === 'show-add-block') { state.showBlockForm = true; render(); }
+  else if (action === 'cancel-block-form') { state.showBlockForm = false; render(); }
+  else if (action === 'delete-block') { db.collection('blocks').doc(el.dataset.id).delete(); }
   else if (action === 'set-status') { db.collection('appointments').doc(el.dataset.id).update({ status: el.dataset.status }); }
   else if (action === 'dismiss-reminder') { db.collection('appointments').doc(el.dataset.id).update({ reminderDate: null }); }
   else if (action === 'toggle-client') { state.expandedClientKey = state.expandedClientKey === el.dataset.key ? null : el.dataset.key; render(); }
@@ -697,6 +774,38 @@ function onServiceSubmit(e) {
     db.collection('services').add(data);
   }
   state.showServiceForm = false; state.editingServiceId = null;
+  render();
+}
+
+function onBlockSubmit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const date = fd.get('date');
+  const mode = fd.get('mode');
+  const note = (fd.get('note') || '').trim();
+  const errBox = document.getElementById('block-error');
+  if (!date) { errBox.textContent = 'Укажите дату'; errBox.style.display = 'block'; return; }
+  const data = { date, note: note || null };
+  if (mode === 'hours') {
+    const startTime = fd.get('startTime');
+    const endTime = fd.get('endTime');
+    if (!startTime || !endTime || startTime >= endTime) {
+      errBox.textContent = 'Проверьте время — «до» должно быть позже «с»';
+      errBox.style.display = 'block';
+      return;
+    }
+    data.allDay = false;
+    data.startTime = startTime;
+    data.endTime = endTime;
+  } else {
+    data.allDay = true;
+    data.startTime = null;
+    data.endTime = null;
+  }
+  errBox.style.display = 'none';
+  db.collection('blocks').add(data);
+  state.showBlockForm = false;
   render();
 }
 
