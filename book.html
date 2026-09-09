@@ -56,6 +56,8 @@
   .success-body { color: var(--text-muted); font-size: 14px; margin: 0 0 22px; }
   .setup-banner { background: var(--surface); border: 1px solid var(--accent-deep); color: var(--accent); border-radius: 10px; padding: 16px 18px; font-size: 13.5px; }
   .setup-banner code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+  .btn-calendar { display: inline-block; width: 100%; box-sizing: border-box; text-align: center; background: none; border: 1px solid var(--hairline); color: var(--text); border-radius: 8px; padding: 13px 18px; font-size: 14px; font-weight: 500; text-decoration: none; }
+  .btn-calendar:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -89,6 +91,7 @@ function todayStr() {
 
 let services = [];
 let submitted = false;
+let lastBooking = null;
 
 const WORK_START = '10:00';
 const WORK_END = '20:00';
@@ -104,6 +107,38 @@ function generateTimeSlots() {
   return slots;
 }
 const TIME_SLOTS = generateTimeSlots();
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function icsEscape(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+function buildCalendarLink(booking) {
+  const { data, serviceName, duration } = booking;
+  const [y, mo, d] = data.date.split('-').map(Number);
+  const [hh, mm] = data.time.split(':').map(Number);
+  const start = new Date(y, mo - 1, d, hh, mm);
+  const durationMin = duration ? Number(duration) : 60;
+  const end = new Date(start.getTime() + durationMin * 60000);
+  const fmt = dt => `${dt.getFullYear()}${pad2(dt.getMonth() + 1)}${pad2(dt.getDate())}T${pad2(dt.getHours())}${pad2(dt.getMinutes())}00`;
+  const summary = 'Перманентный макияж: ' + serviceName;
+  const description = 'Студия перманентного макияжа. Услуга: ' + serviceName + (data.notes ? ('. Заметка: ' + data.notes) : '');
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//PMU Studio//Booking//RU',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    'UID:' + 'pmu-' + Date.now() + '@pmu-booking',
+    'DTSTAMP:' + fmt(new Date()),
+    'DTSTART:' + fmt(start),
+    'DTEND:' + fmt(end),
+    'SUMMARY:' + icsEscape(summary),
+    'DESCRIPTION:' + icsEscape(description),
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+  return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+}
 
 function render() {
   const app = document.getElementById('app');
@@ -121,9 +156,10 @@ function render() {
       <div class="success-card">
         <p class="success-title">Заявка отправлена</p>
         <p class="success-body">Мастер свяжется с вами, чтобы подтвердить дату и время.</p>
-        <button class="btn-primary" style="margin-top:0;" id="new-booking-btn">Записаться ещё раз</button>
+        ${lastBooking ? `<a class="btn-calendar" href="${buildCalendarLink(lastBooking)}" target="_blank" rel="noopener">📅 Добавить в календарь</a>` : ''}
+        <button class="btn-primary" style="margin-top:10px;" id="new-booking-btn">Записаться ещё раз</button>
       </div>`;
-    document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; render(); });
+    document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; lastBooking = null; render(); });
     return;
   }
 
@@ -264,6 +300,8 @@ function onSubmit(e) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         ...data
       }).then(() => {
+        const svc = services.find(s => s.id === data.serviceId);
+        lastBooking = { data, serviceName: svc ? svc.name : 'Процедура', duration: svc ? svc.duration : null };
         submitted = true;
         render();
       });
