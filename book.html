@@ -106,11 +106,12 @@ function render() {
       <label class="field-label">Желаемое время</label>
       <input type="time" name="time" required />
 
-      <label class="field-label">Ваше имя</label>
-      <input type="text" name="clientName" placeholder="Анна Ковальчук" required />
-
       <label class="field-label">Телефон</label>
-      <input type="tel" name="phone" placeholder="+380 67 123 4567" required />
+      <input type="tel" name="phone" id="phone-input" placeholder="+380 67 123 4567" required />
+      <div id="returning-hint" style="font-size:12.5px; color:#8A7570; margin-top:6px; display:none;"></div>
+
+      <label class="field-label">Ваше имя</label>
+      <input type="text" name="clientName" id="name-input" placeholder="Анна Ковальчук" required />
 
       <label class="field-label">Комментарий (необязательно)</label>
       <textarea name="notes" placeholder="Аллергии, пожелания по форме и т.д."></textarea>
@@ -124,6 +125,25 @@ function render() {
   if (form) form.addEventListener('submit', onSubmit);
   const dateInput = document.getElementById('date-input');
   if (dateInput) dateInput.addEventListener('change', onDateChange);
+  const phoneInput = document.getElementById('phone-input');
+  if (phoneInput) phoneInput.addEventListener('blur', onPhoneBlur);
+}
+
+function onPhoneBlur(e) {
+  const phone = (e.target.value || '').trim();
+  const hint = document.getElementById('returning-hint');
+  const nameInput = document.getElementById('name-input');
+  if (!phone || !hint || !nameInput) return;
+  db.collection('appointments').where('phone', '==', phone).get().then(snap => {
+    if (snap.empty) { hint.style.display = 'none'; return; }
+    const visits = snap.docs.map(d => d.data()).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+    const last = visits[0];
+    if (last && last.clientName) {
+      if (!nameInput.value.trim()) nameInput.value = last.clientName;
+      hint.textContent = `С возвращением, ${last.clientName}!`;
+      hint.style.display = 'block';
+    }
+  }).catch(() => { hint.style.display = 'none'; });
 }
 
 function onDateChange(e) {
