@@ -87,6 +87,21 @@ function todayStr() {
 let services = [];
 let submitted = false;
 
+const WORK_START = '10:00';
+const WORK_END = '20:00';
+function generateTimeSlots() {
+  const slots = [];
+  let [h, m] = WORK_START.split(':').map(Number);
+  const [endH, endM] = WORK_END.split(':').map(Number);
+  while (h < endH || (h === endH && m < endM)) {
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    m += 30;
+    if (m >= 60) { m -= 60; h += 1; }
+  }
+  return slots;
+}
+const TIME_SLOTS = generateTimeSlots();
+
 function render() {
   const app = document.getElementById('app');
   if (!CONFIG_IS_SET) {
@@ -124,10 +139,12 @@ function render() {
 
       <label class="field-label">Желаемая дата</label>
       <input type="date" name="date" id="date-input" min="${todayStr()}" required />
-      <div id="busy-times" style="font-size:12.5px; color:#A6968D; margin-top:6px;"></div>
 
       <label class="field-label">Желаемое время</label>
-      <input type="time" name="time" required />
+      <select name="time" id="time-input" required disabled>
+        <option value="">Сначала выберите дату</option>
+      </select>
+      <div id="busy-times" style="font-size:12.5px; color:#A6968D; margin-top:6px;"></div>
 
       <label class="field-label">Телефон</label>
       <input type="tel" name="phone" id="phone-input" placeholder="+380 67 123 4567" required />
@@ -171,17 +188,37 @@ function onPhoneBlur(e) {
 
 function onDateChange(e) {
   const box = document.getElementById('busy-times');
+  const timeSelect = document.getElementById('time-input');
   const date = e.target.value;
-  if (!date) { box.textContent = ''; return; }
-  box.textContent = 'Проверяю занятые часы…';
+  if (!date) {
+    timeSelect.innerHTML = '<option value="">Сначала выберите дату</option>';
+    timeSelect.disabled = true;
+    box.textContent = '';
+    return;
+  }
+  timeSelect.disabled = true;
+  timeSelect.innerHTML = '<option value="">Загрузка…</option>';
+  box.textContent = '';
   db.collection('appointments').where('date', '==', date).get().then(snap => {
-    const busy = snap.docs
-      .map(d => d.data())
-      .filter(a => a.status !== 'cancelled')
-      .map(a => a.time)
-      .sort();
-    box.textContent = busy.length ? `Занято на этот день: ${busy.join(', ')}` : 'На этот день пока всё свободно';
-  }).catch(() => { box.textContent = ''; });
+    const busy = new Set(
+      snap.docs.map(d => d.data()).filter(a => a.status !== 'cancelled').map(a => a.time)
+    );
+    const free = TIME_SLOTS.filter(t => !busy.has(t));
+    if (free.length === 0) {
+      timeSelect.innerHTML = '<option value="">Нет свободного времени на этот день</option>';
+      timeSelect.disabled = true;
+      box.textContent = 'На этот день все места заняты — выберите другую дату.';
+      return;
+    }
+    timeSelect.innerHTML = '<option value="">Выберите время</option>' +
+      free.map(t => `<option value="${t}">${t}</option>`).join('');
+    timeSelect.disabled = false;
+    box.textContent = '';
+  }).catch(() => {
+    timeSelect.innerHTML = '<option value="">Не удалось загрузить время</option>';
+    timeSelect.disabled = true;
+    box.textContent = 'Не удалось проверить занятость — попробуйте выбрать дату ещё раз.';
+  });
 }
 
 function onSubmit(e) {
