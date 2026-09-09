@@ -3,80 +3,40 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Студия перманентного макияжа — записи</title>
+<title>Студия перманентного макияжа — панель мастера</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: 'Work Sans', sans-serif;
-    background: #FAF7F5;
-    color: #2E2024;
-  }
-  #app {
-    max-width: 780px;
-    margin: 0 auto;
-    padding: 32px 20px 64px;
-  }
-  h1 {
-    font-family: 'Fraunces', serif;
-    font-size: 28px;
-    font-weight: 500;
-    margin: 0;
-  }
+  body { margin: 0; font-family: 'Work Sans', sans-serif; background: #FAF7F5; color: #2E2024; }
+  #app { max-width: 780px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-family: 'Fraunces', serif; font-size: 28px; font-weight: 500; margin: 0; }
   .subtitle { margin: 4px 0 0; color: #8A7570; font-size: 14px; }
-  .tabs {
-    display: flex;
-    gap: 24px;
-    border-bottom: 1px solid #E7DEDA;
-    margin: 24px 0;
-    overflow-x: auto;
-  }
-  .tab-btn {
-    background: none;
-    border: none;
-    padding: 10px 2px;
-    font-size: 14.5px;
-    color: #8A7570;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-    cursor: pointer;
-    font-family: 'Work Sans', sans-serif;
-  }
+  .header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .client-link-box { background: #fff; border: 1px solid #E7DEDA; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: #8A7570; max-width: 260px; }
+  .client-link-box a { color: #8C3B4A; font-weight: 500; word-break: break-all; }
+  .tabs { display: flex; gap: 24px; border-bottom: 1px solid #E7DEDA; margin: 24px 0; overflow-x: auto; }
+  .tab-btn { background: none; border: none; padding: 10px 2px; font-size: 14.5px; color: #8A7570; border-bottom: 2px solid transparent; white-space: nowrap; cursor: pointer; font-family: 'Work Sans', sans-serif; }
   .tab-btn.active { color: #8C3B4A; font-weight: 500; border-bottom-color: #8C3B4A; }
   .date-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .date-human { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; text-transform: capitalize; }
-  .icon-btn, .link-btn {
-    border: 1px solid #E7DEDA;
-    background: #fff;
-    border-radius: 6px;
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; font-size: 16px;
-  }
+  .icon-btn, .link-btn { border: 1px solid #E7DEDA; background: #fff; border-radius: 6px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; }
   .link-btn { width: auto; border: none; background: none; color: #8C3B4A; font-weight: 500; font-size: 13px; padding: 4px 6px; }
   input[type="date"] { border: 1px solid #E7DEDA; border-radius: 6px; padding: 5px 8px; font-size: 13px; color: #8A7570; background: #fff; }
   .stats-row { display: flex; gap: 12px; margin-bottom: 20px; }
   .stat-card { flex: 1; background: #fff; border: 1px solid #E7DEDA; border-radius: 8px; padding: 12px 16px; }
   .stat-label { font-size: 12.5px; color: #8A7570; }
   .stat-value { font-size: 20px; font-weight: 500; margin-top: 4px; font-family: 'Fraunces', serif; }
-  .btn-primary {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: #8C3B4A; color: #fff; border: none; border-radius: 7px;
-    padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer;
-  }
-  .btn-secondary {
-    background: none; border: 1px solid #E7DEDA; color: #5F5450;
-    border-radius: 7px; padding: 10px 18px; font-size: 14px; cursor: pointer;
-  }
+  .btn-primary { display: inline-flex; align-items: center; gap: 8px; background: #8C3B4A; color: #fff; border: none; border-radius: 7px; padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-secondary { background: none; border: 1px solid #E7DEDA; color: #5F5450; border-radius: 7px; padding: 10px 18px; font-size: 14px; cursor: pointer; }
   .form-card { background: #fff; border: 1px solid #E7DEDA; border-radius: 10px; padding: 20px; margin-top: 14px; }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .form-grid .wide { grid-column: 1 / -1; }
   label.field-label { display: block; font-size: 12.5px; color: #8A7570; margin-bottom: 5px; }
   input[type="text"], input[type="tel"], input[type="time"], input[type="number"], select, textarea {
-    width: 100%; border: 1px solid #E7DEDA; border-radius: 6px; padding: 9px 10px;
-    font-size: 14px; background: #FDFBFA; color: #2E2024; font-family: 'Work Sans', sans-serif;
+    width: 100%; border: 1px solid #E7DEDA; border-radius: 6px; padding: 9px 10px; font-size: 14px; background: #FDFBFA; color: #2E2024; font-family: 'Work Sans', sans-serif;
   }
   textarea { min-height: 60px; resize: vertical; }
   .error-text { color: #A3402E; font-size: 13px; margin-top: 12px; }
@@ -84,10 +44,7 @@
   .empty-state { border: 1px dashed #E7DEDA; border-radius: 10px; padding: 36px 20px; text-align: center; }
   .empty-title { font-family: 'Fraunces', serif; font-size: 17px; margin: 0 0 4px; }
   .empty-body { color: #8A7570; font-size: 13.5px; margin: 0; }
-  .appt-row, .service-row {
-    display: flex; gap: 14px; padding: 14px 16px; background: #fff;
-    border: 1px solid #EFE7E3; border-left-width: 3px; margin-top: -1px;
-  }
+  .appt-row, .service-row { display: flex; gap: 14px; padding: 14px 16px; background: #fff; border: 1px solid #EFE7E3; border-left-width: 3px; margin-top: -1px; }
   .appt-time { width: 56px; font-size: 13.5px; color: #5F5450; padding-top: 2px; flex-shrink: 0; }
   .appt-main { flex: 1; min-width: 0; }
   .appt-client { font-size: 15px; font-weight: 500; }
@@ -96,19 +53,14 @@
   .appt-notes { font-size: 12.5px; color: #8A7570; margin-top: 6px; font-style: italic; }
   .appt-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
   .status-pill { font-size: 11.5px; font-weight: 500; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .status-pill.new { animation: pulse-new 1.6s ease-in-out 2; }
+  @keyframes pulse-new { 0%, 100% { box-shadow: 0 0 0 0 rgba(140,59,74,0.35); } 50% { box-shadow: 0 0 0 4px rgba(140,59,74,0.15); } }
   .appt-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .text-action { background: none; border: none; color: #8A7570; font-size: 12px; cursor: pointer; padding: 2px 4px; font-family: 'Work Sans', sans-serif; }
   .text-action:hover { color: #2E2024; }
   .client-card { background: #fff; border: 1px solid #EFE7E3; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-  .client-header {
-    width: 100%; display: flex; align-items: center; gap: 14px; padding: 14px 16px;
-    background: none; border: none; cursor: pointer; text-align: left; font-family: 'Work Sans', sans-serif;
-  }
-  .client-avatar {
-    width: 36px; height: 36px; border-radius: 50%; background: #F3DFE1; color: #8C3B4A;
-    display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif;
-    font-weight: 500; font-size: 15px; flex-shrink: 0;
-  }
+  .client-header { width: 100%; display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: none; border: none; cursor: pointer; text-align: left; font-family: 'Work Sans', sans-serif; }
+  .client-avatar { width: 36px; height: 36px; border-radius: 50%; background: #F3DFE1; color: #8C3B4A; display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', serif; font-weight: 500; font-size: 15px; flex-shrink: 0; }
   .client-name { font-size: 15px; font-weight: 500; }
   .client-revenue { font-size: 14px; font-weight: 500; margin-right: 4px; }
   .client-history { border-top: 1px solid #EFE7E3; padding: 6px 16px 12px; }
@@ -116,22 +68,38 @@
   .history-date { font-size: 12.5px; color: #8A7570; }
   .history-service { font-size: 14px; margin-top: 2px; }
   .service-price { font-size: 15px; font-weight: 500; }
+  .setup-banner { background: #FBEAF0; border: 1px solid #F0C7D3; color: #72243E; border-radius: 8px; padding: 14px 16px; font-size: 13.5px; margin-bottom: 20px; }
+  .setup-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
   ::placeholder { color: #B3A29C; }
-  @media (max-width: 480px) {
-    .form-grid { grid-template-columns: 1fr; }
-    .appt-row, .service-row { flex-wrap: wrap; }
-  }
+  @media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } .appt-row, .service-row { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><p style="text-align:center; color:#8A7570; padding:60px 0; font-family:'Work Sans',sans-serif;">Загрузка…</p></div>
 
 <script>
-/* ---------- storage ---------- */
-function loadServices() { try { return JSON.parse(localStorage.getItem('pmu_services')) || []; } catch(e) { return []; } }
-function loadAppointments() { try { return JSON.parse(localStorage.getItem('pmu_appointments')) || []; } catch(e) { return []; } }
-function saveServices() { localStorage.setItem('pmu_services', JSON.stringify(state.services)); }
-function saveAppointments() { localStorage.setItem('pmu_appointments', JSON.stringify(state.appointments)); }
+/* =======================================================================
+   НАСТРОЙКА FIREBASE — вставьте сюда свои данные из консоли Firebase
+   (Project settings → General → Your apps → SDK setup and configuration)
+   ======================================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAt0TRdJbH-O3pM84fSRuqW56ajvrvFCsw",
+  authDomain: "pmu-booking-ba795.firebaseapp.com",
+  projectId: "pmu-booking-ba795",
+  storageBucket: "pmu-booking-ba795.firebasestorage.app",
+  messagingSenderId: "1072435451685",
+  appId: "1:1072435451685:web:4f37701272cd95b767accc"
+};
+/* Ссылка на страницу для клиентов — впишите после публикации book.html */
+const CLIENT_BOOKING_URL = "https://ваш-логин.github.io/pmu-booking/book.html";
+/* ======================================================================= */
+
+const CONFIG_IS_SET = firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf("ВАШ_") === -1;
+let db = null;
+if (CONFIG_IS_SET) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+}
 
 /* ---------- helpers ---------- */
 function todayStr() {
@@ -149,7 +117,6 @@ function formatDateHuman(dateStr) {
   return d.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 function formatMoney(n) { return (Number(n) || 0).toLocaleString('ru-RU') + ' грн'; }
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function esc(s) { const d = document.createElement('div'); d.innerText = s == null ? '' : s; return d.innerHTML; }
 
 const STATUS_META = {
@@ -161,8 +128,8 @@ const STATUS_META = {
 /* ---------- state ---------- */
 let state = {
   tab: 'today',
-  services: loadServices(),
-  appointments: loadAppointments(),
+  services: [],
+  appointments: [],
   selectedDate: todayStr(),
   showAddForm: false,
   editingApptId: null,
@@ -171,11 +138,22 @@ let state = {
   editingServiceId: null,
 };
 
+/* ---------- Firestore live sync ---------- */
+if (db) {
+  db.collection('services').orderBy('name').onSnapshot(snap => {
+    state.services = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }, err => console.error('services sync error', err));
+
+  db.collection('appointments').onSnapshot(snap => {
+    state.appointments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  }, err => console.error('appointments sync error', err));
+}
+
 /* ---------- derived data ---------- */
 function getDayAppointments() {
-  return state.appointments
-    .filter(a => a.date === state.selectedDate)
-    .sort((a, b) => a.time.localeCompare(b.time));
+  return state.appointments.filter(a => a.date === state.selectedDate).sort((a, b) => a.time.localeCompare(b.time));
 }
 function getDayRevenue(list) {
   return list.filter(a => a.status !== 'cancelled').reduce((sum, a) => {
@@ -186,7 +164,7 @@ function getDayRevenue(list) {
 function getClients() {
   const map = new Map();
   for (const a of state.appointments) {
-    const key = (a.phone || '').trim() || a.clientName.trim().toLowerCase();
+    const key = (a.phone || '').trim() || (a.clientName || '').trim().toLowerCase();
     if (!map.has(key)) map.set(key, { key, name: a.clientName, phone: a.phone, visits: [] });
     map.get(key).visits.push(a);
   }
@@ -203,11 +181,20 @@ function getClients() {
 /* ---------- render ---------- */
 function render() {
   const app = document.getElementById('app');
+  if (!CONFIG_IS_SET) {
+    app.innerHTML = `
+      <header><h1>Студия перманентного макияжа</h1><p class="subtitle">Панель мастера</p></header>
+      <div class="setup-banner">
+        Firebase ещё не подключён. Откройте файл <code>index.html</code>, найдите блок
+        <code>firebaseConfig</code> в начале &lt;script&gt; и вставьте туда данные вашего проекта из консоли Firebase.
+      </div>`;
+    return;
+  }
   app.innerHTML = `
-    <header>
-      <h1>Студия перманентного макияжа</h1>
-      <p class="subtitle">Записи и клиенты</p>
-    </header>
+    <div class="header-row">
+      <header><h1>Студия перманентного макияжа</h1><p class="subtitle">Записи и клиенты</p></header>
+      <div class="client-link-box">Ссылка для клиентов:<br><a href="${esc(CLIENT_BOOKING_URL)}" target="_blank">${esc(CLIENT_BOOKING_URL)}</a></div>
+    </div>
     <nav class="tabs">
       <button class="tab-btn ${state.tab === 'today' ? 'active' : ''}" data-action="tab" data-tab="today">Сегодня</button>
       <button class="tab-btn ${state.tab === 'clients' ? 'active' : ''}" data-action="tab" data-tab="clients">Клиенты</button>
@@ -239,10 +226,8 @@ function renderToday() {
     ${(state.showAddForm || state.editingApptId) ? renderApptForm() : ''}
     <div style="margin-top:20px;">
       ${dayAppts.length === 0 && !state.showAddForm ? `
-        <div class="empty-state">
-          <p class="empty-title">На этот день записей нет</p>
-          <p class="empty-body">Добавьте запись, чтобы она появилась здесь.</p>
-        </div>` : dayAppts.map(renderApptRow).join('')}
+        <div class="empty-state"><p class="empty-title">На этот день записей нет</p><p class="empty-body">Добавьте запись сами или дождитесь заявки от клиента по вашей ссылке.</p></div>`
+        : dayAppts.map(renderApptRow).join('')}
     </div>
   `;
 }
@@ -258,6 +243,7 @@ function renderApptRow(a) {
         <div class="appt-detail">${svc ? esc(svc.name) + ' · ' + formatMoney(svc.price) : 'Услуга удалена'}</div>
         ${a.phone ? `<div class="appt-detail-muted">${esc(a.phone)}</div>` : ''}
         ${a.notes ? `<div class="appt-notes">${esc(a.notes)}</div>` : ''}
+        ${a.source === 'client' ? `<div class="appt-detail-muted">Заявка с сайта</div>` : ''}
       </div>
       <div class="appt-right">
         <span class="status-pill" style="color:${meta.color}; background:${meta.bg};">${meta.label}</span>
@@ -306,15 +292,13 @@ function renderApptForm() {
 
 function renderClients() {
   const clients = getClients();
-  if (clients.length === 0) {
-    return `<div class="empty-state"><p class="empty-title">Клиентов пока нет</p><p class="empty-body">Они появятся здесь после первой записи.</p></div>`;
-  }
+  if (clients.length === 0) return `<div class="empty-state"><p class="empty-title">Клиентов пока нет</p><p class="empty-body">Они появятся здесь после первой записи.</p></div>`;
   return clients.map(c => {
     const open = state.expandedClientKey === c.key;
     return `
       <div class="client-card">
         <button class="client-header" data-action="toggle-client" data-key="${esc(c.key)}">
-          <div class="client-avatar">${esc(c.name.trim().slice(0,1).toUpperCase() || '?')}</div>
+          <div class="client-avatar">${esc((c.name || '?').trim().slice(0,1).toUpperCase() || '?')}</div>
           <div style="flex:1;">
             <div class="client-name">${esc(c.name)}</div>
             <div class="appt-detail-muted">${c.phone ? esc(c.phone) + ' · ' : ''}${c.visits.length} ${c.visits.length === 1 ? 'визит' : 'визита(ов)'}</div>
@@ -343,10 +327,8 @@ function renderServices() {
     ${(state.showServiceForm || state.editingServiceId) ? renderServiceForm() : ''}
     <div style="margin-top:20px;">
       ${state.services.length === 0 && !state.showServiceForm ? `
-        <div class="empty-state">
-          <p class="empty-title">Прайс пуст</p>
-          <p class="empty-body">Добавьте услуги, чтобы выбирать их при записи клиентов.</p>
-        </div>` : state.services.map(renderServiceRow).join('')}
+        <div class="empty-state"><p class="empty-title">Прайс пуст</p><p class="empty-body">Добавьте услуги — они появятся и в форме для клиентов.</p></div>`
+        : state.services.map(renderServiceRow).join('')}
     </div>
   `;
 }
@@ -388,15 +370,11 @@ function renderServiceForm() {
 /* ---------- events ---------- */
 function attachListeners() {
   const app = document.getElementById('app');
-
   const datePicker = document.getElementById('date-picker');
   if (datePicker) datePicker.addEventListener('change', e => { state.selectedDate = e.target.value; render(); });
-
   app.addEventListener('click', onClick);
-
   const apptForm = document.getElementById('appt-form');
   if (apptForm) apptForm.addEventListener('submit', onApptSubmit);
-
   const serviceForm = document.getElementById('service-form');
   if (serviceForm) serviceForm.addEventListener('submit', onServiceSubmit);
 }
@@ -413,13 +391,13 @@ function onClick(e) {
   else if (action === 'show-add-appt') { state.editingApptId = null; state.showAddForm = true; render(); }
   else if (action === 'cancel-appt-form') { state.showAddForm = false; state.editingApptId = null; render(); }
   else if (action === 'edit-appt') { state.showAddForm = false; state.editingApptId = el.dataset.id; render(); }
-  else if (action === 'delete-appt') { state.appointments = state.appointments.filter(a => a.id !== el.dataset.id); saveAppointments(); render(); }
-  else if (action === 'set-status') { const a = state.appointments.find(a => a.id === el.dataset.id); if (a) { a.status = el.dataset.status; saveAppointments(); render(); } }
+  else if (action === 'delete-appt') { db.collection('appointments').doc(el.dataset.id).delete(); }
+  else if (action === 'set-status') { db.collection('appointments').doc(el.dataset.id).update({ status: el.dataset.status }); }
   else if (action === 'toggle-client') { state.expandedClientKey = state.expandedClientKey === el.dataset.key ? null : el.dataset.key; render(); }
   else if (action === 'show-add-service') { state.editingServiceId = null; state.showServiceForm = true; render(); }
   else if (action === 'cancel-service-form') { state.showServiceForm = false; state.editingServiceId = null; render(); }
   else if (action === 'edit-service') { state.showServiceForm = false; state.editingServiceId = el.dataset.id; render(); }
-  else if (action === 'delete-service') { state.services = state.services.filter(s => s.id !== el.dataset.id); saveServices(); render(); }
+  else if (action === 'delete-service') { db.collection('services').doc(el.dataset.id).delete(); }
 }
 
 function onApptSubmit(e) {
@@ -435,20 +413,14 @@ function onApptSubmit(e) {
     notes: (fd.get('notes') || '').trim(),
   };
   const errBox = document.getElementById('appt-error');
-  if (!data.clientName || !data.phone || !data.date || !data.time) {
-    errBox.textContent = 'Заполните все обязательные поля'; errBox.style.display = 'block'; return;
-  }
-  if (state.services.length === 0) {
-    errBox.textContent = 'Сначала добавьте услугу во вкладке «Услуги и цены»'; errBox.style.display = 'block'; return;
-  }
+  if (!data.clientName || !data.phone || !data.date || !data.time) { errBox.textContent = 'Заполните все обязательные поля'; errBox.style.display = 'block'; return; }
+  if (state.services.length === 0) { errBox.textContent = 'Сначала добавьте услугу во вкладке «Услуги и цены»'; errBox.style.display = 'block'; return; }
   const editingId = form.dataset.editingId;
   if (editingId) {
-    const a = state.appointments.find(a => a.id === editingId);
-    Object.assign(a, data);
+    db.collection('appointments').doc(editingId).update(data);
   } else {
-    state.appointments.push({ id: uid(), status: 'planned', ...data });
+    db.collection('appointments').add({ status: 'planned', source: 'master', ...data });
   }
-  saveAppointments();
   state.showAddForm = false; state.editingApptId = null;
   render();
 }
@@ -466,12 +438,10 @@ function onServiceSubmit(e) {
   const data = { name, price: Number(price), duration: duration ? Number(duration) : null };
   const editingId = form.dataset.editingId;
   if (editingId) {
-    const s = state.services.find(s => s.id === editingId);
-    Object.assign(s, data);
+    db.collection('services').doc(editingId).update(data);
   } else {
-    state.services.push({ id: uid(), ...data });
+    db.collection('services').add(data);
   }
-  saveServices();
   state.showServiceForm = false; state.editingServiceId = null;
   render();
 }

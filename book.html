@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Запись — Студия перманентного макияжа</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Work Sans', sans-serif; background: #FAF7F5; color: #2E2024; }
+  #app { max-width: 480px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500; margin: 0; text-align: center; }
+  .subtitle { margin: 6px 0 32px; color: #8A7570; font-size: 14px; text-align: center; }
+  .form-card { background: #fff; border: 1px solid #E7DEDA; border-radius: 12px; padding: 24px 22px; }
+  label.field-label { display: block; font-size: 12.5px; color: #8A7570; margin-bottom: 5px; margin-top: 16px; }
+  label.field-label:first-child { margin-top: 0; }
+  input[type="text"], input[type="tel"], input[type="date"], input[type="time"], select, textarea {
+    width: 100%; border: 1px solid #E7DEDA; border-radius: 6px; padding: 10px 12px; font-size: 15px;
+    background: #FDFBFA; color: #2E2024; font-family: 'Work Sans', sans-serif;
+  }
+  textarea { min-height: 70px; resize: vertical; }
+  ::placeholder { color: #B3A29C; }
+  .btn-primary { width: 100%; margin-top: 22px; background: #8C3B4A; color: #fff; border: none; border-radius: 7px; padding: 13px 18px; font-size: 15px; font-weight: 500; cursor: pointer; }
+  .error-text { color: #A3402E; font-size: 13px; margin-top: 12px; }
+  .success-card { background: #fff; border: 1px solid #E7DEDA; border-radius: 12px; padding: 36px 24px; text-align: center; }
+  .success-title { font-family: 'Fraunces', serif; font-size: 20px; margin: 0 0 8px; }
+  .success-body { color: #8A7570; font-size: 14px; margin: 0 0 20px; }
+  .setup-banner { background: #FBEAF0; border: 1px solid #F0C7D3; color: #72243E; border-radius: 8px; padding: 14px 16px; font-size: 13.5px; }
+  .setup-banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="app"><p style="text-align:center; color:#8A7570; padding:60px 0;">Загрузка…</p></div>
+
+<script>
+/* Вставьте те же данные, что и в index.html — тот же проект Firebase */
+const firebaseConfig = {
+  apiKey: "AIzaSyAt0TRdJbH-O3pM84fSRuqW56ajvrvFCsw",
+  authDomain: "pmu-booking-ba795.firebaseapp.com",
+  projectId: "pmu-booking-ba795",
+  storageBucket: "pmu-booking-ba795.firebasestorage.app",
+  messagingSenderId: "1072435451685",
+  appId: "1:1072435451685:web:4f37701272cd95b767accc"
+};
+
+const CONFIG_IS_SET = firebaseConfig.apiKey && firebaseConfig.apiKey.indexOf("ВАШ_") === -1;
+let db = null;
+if (CONFIG_IS_SET) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+}
+
+function esc(s) { const d = document.createElement('div'); d.innerText = s == null ? '' : s; return d.innerHTML; }
+function formatMoney(n) { return (Number(n) || 0).toLocaleString('ru-RU') + ' грн'; }
+function todayStr() {
+  const d = new Date();
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+let services = [];
+let submitted = false;
+
+function render() {
+  const app = document.getElementById('app');
+  if (!CONFIG_IS_SET) {
+    app.innerHTML = `
+      <h1>Запись на процедуру</h1>
+      <div class="setup-banner">
+        Firebase ещё не подключён. Откройте файл <code>book.html</code>, найдите блок
+        <code>firebaseConfig</code> и вставьте туда те же данные, что и в <code>index.html</code>.
+      </div>`;
+    return;
+  }
+  if (submitted) {
+    app.innerHTML = `
+      <div class="success-card">
+        <p class="success-title">Заявка отправлена</p>
+        <p class="success-body">Мастер свяжется с вами, чтобы подтвердить дату и время.</p>
+        <button class="btn-primary" style="margin-top:0;" id="new-booking-btn">Записаться ещё раз</button>
+      </div>`;
+    document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; render(); });
+    return;
+  }
+
+  const serviceOptions = services.length
+    ? services.map(s => `<option value="${s.id}">${esc(s.name)} — ${formatMoney(s.price)}</option>`).join('')
+    : '';
+
+  app.innerHTML = `
+    <h1>Запись на процедуру</h1>
+    <p class="subtitle">Студия перманентного макияжа</p>
+    <form class="form-card" id="book-form">
+      <label class="field-label">Услуга</label>
+      ${services.length === 0
+        ? `<div style="font-size:13.5px; color:#8A7570;">Пока нет доступных услуг. Свяжитесь с мастером напрямую.</div>`
+        : `<select name="serviceId" required>${serviceOptions}</select>`}
+
+      <label class="field-label">Желаемая дата</label>
+      <input type="date" name="date" min="${todayStr()}" required />
+
+      <label class="field-label">Желаемое время</label>
+      <input type="time" name="time" required />
+
+      <label class="field-label">Ваше имя</label>
+      <input type="text" name="clientName" placeholder="Анна Ковальчук" required />
+
+      <label class="field-label">Телефон</label>
+      <input type="tel" name="phone" placeholder="+380 67 123 4567" required />
+
+      <label class="field-label">Комментарий (необязательно)</label>
+      <textarea name="notes" placeholder="Аллергии, пожелания по форме и т.д."></textarea>
+
+      <div class="error-text" id="book-error" style="display:none;"></div>
+      <button type="submit" class="btn-primary" ${services.length === 0 ? 'disabled' : ''}>Отправить заявку</button>
+    </form>
+  `;
+
+  const form = document.getElementById('book-form');
+  if (form) form.addEventListener('submit', onSubmit);
+}
+
+function onSubmit(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const data = {
+    serviceId: fd.get('serviceId'),
+    date: fd.get('date'),
+    time: fd.get('time'),
+    clientName: (fd.get('clientName') || '').trim(),
+    phone: (fd.get('phone') || '').trim(),
+    notes: (fd.get('notes') || '').trim(),
+  };
+  const errBox = document.getElementById('book-error');
+  if (!data.clientName || !data.phone || !data.date || !data.time || !data.serviceId) {
+    errBox.textContent = 'Заполните все обязательные поля';
+    errBox.style.display = 'block';
+    return;
+  }
+  errBox.style.display = 'none';
+  db.collection('appointments').add({
+    status: 'planned',
+    source: 'client',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    ...data
+  }).then(() => {
+    submitted = true;
+    render();
+  }).catch(err => {
+    errBox.textContent = 'Не удалось отправить заявку. Попробуйте ещё раз.';
+    errBox.style.display = 'block';
+    console.error(err);
+  });
+}
+
+if (CONFIG_IS_SET) {
+  db.collection('services').orderBy('name').onSnapshot(snap => {
+    services = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    render();
+  });
+} else {
+  render();
+}
+</script>
+</body>
+</html>
