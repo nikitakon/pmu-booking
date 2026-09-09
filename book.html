@@ -261,8 +261,21 @@ function onDateChange(e) {
   timeSelect.disabled = true;
   timeSelect.innerHTML = '<option value="">Загрузка…</option>';
   box.textContent = '';
-  db.collection('appointments').where('date', '==', date).get().then(snap => {
-    currentBusyRanges = snap.docs
+
+  Promise.all([
+    db.collection('appointments').where('date', '==', date).get(),
+    db.collection('blocks').where('date', '==', date).get()
+  ]).then(([apptSnap, blockSnap]) => {
+    const blocks = blockSnap.docs.map(d => d.data());
+    const isFullyBlocked = blocks.some(b => b.allDay);
+    if (isFullyBlocked) {
+      timeSelect.innerHTML = '<option value="">Мастер не принимает в этот день</option>';
+      timeSelect.disabled = true;
+      box.textContent = 'В этот день мастер не принимает — выберите другую дату.';
+      return;
+    }
+
+    const apptRanges = apptSnap.docs
       .map(d => d.data())
       .filter(a => a.status !== 'cancelled')
       .map(a => {
@@ -271,6 +284,11 @@ function onDateChange(e) {
         const start = minutesFromTime(a.time);
         return { start, end: start + dur };
       });
+    const blockRanges = blocks
+      .filter(b => !b.allDay && b.startTime && b.endTime)
+      .map(b => ({ start: minutesFromTime(b.startTime), end: minutesFromTime(b.endTime) }));
+
+    currentBusyRanges = apptRanges.concat(blockRanges);
     updateTimeOptions();
   }).catch(() => {
     timeSelect.innerHTML = '<option value="">Не удалось загрузить время</option>';
@@ -345,10 +363,19 @@ function onSubmit(e) {
     .where('date', '==', data.date)
     .get()
     .then(snap => {
+      return db.collection('blocks').where('date', '==', data.date).get().then(blockSnap => [snap, blockSnap]);
+    })
+    .then(([snap, blockSnap]) => {
       const svc = services.find(s => s.id === data.serviceId);
       const duration = svc && svc.duration ? Number(svc.duration) : 60;
       const newStart = minutesFromTime(data.time);
       const newEnd = newStart + duration;
+
+      const blocks = blockSnap.docs.map(d => d.data());
+      const isFullyBlocked = blocks.some(b => b.allDay);
+      const blockOverlap = blocks.some(b => !b.allDay && b.startTime && b.endTime &&
+        newStart < minutesFromTime(b.endTime) && newEnd > minutesFromTime(b.startTime));
+
       const taken = snap.docs.some(d => {
         const a = d.data();
         if (a.status === 'cancelled') return false;
@@ -358,8 +385,9 @@ function onSubmit(e) {
         const otherEnd = otherStart + otherDuration;
         return newStart < otherEnd && newEnd > otherStart;
       });
-      if (taken) {
-        errBox.textContent = 'Это время уже занято другой записью — выберите другое.';
+
+      if (isFullyBlocked || blockOverlap || taken) {
+        errBox.textContent = 'Это время только что стало недоступно — выберите другое.';
         errBox.style.display = 'block';
         submitBtn.disabled = false;
         onDateChange({ target: { value: data.date } });
