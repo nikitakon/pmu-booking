@@ -81,8 +81,6 @@
   .success-body { color: var(--text-muted); font-size: 14px; margin: 0 0 22px; }
   .setup-banner { background: var(--surface); border: 1px solid var(--accent-deep); color: var(--accent); border-radius: 10px; padding: 16px 18px; font-size: 13.5px; }
   .setup-banner code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 4px; color: var(--text); }
-  .btn-calendar { display: inline-block; width: 100%; box-sizing: border-box; text-align: center; background: none; border: 1px solid var(--hairline); color: var(--text); border-radius: 8px; padding: 13px 18px; font-size: 14px; font-weight: 500; text-decoration: none; }
-  .btn-calendar:hover { border-color: var(--accent); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -120,7 +118,7 @@ function formatDateHuman(dateStr) {
 
 let services = [];
 let submitted = false;
-let lastBooking = null;
+let currentBusyRanges = [];
 
 const WORK_START = '10:00';
 const WORK_END = '20:00';
@@ -137,37 +135,6 @@ function generateTimeSlots() {
 }
 const TIME_SLOTS = generateTimeSlots();
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-function icsEscape(s) {
-  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
-}
-function buildCalendarLink(booking) {
-  const { data, serviceName, duration } = booking;
-  const [y, mo, d] = data.date.split('-').map(Number);
-  const [hh, mm] = data.time.split(':').map(Number);
-  const start = new Date(y, mo - 1, d, hh, mm);
-  const durationMin = duration ? Number(duration) : 60;
-  const end = new Date(start.getTime() + durationMin * 60000);
-  const fmt = dt => `${dt.getFullYear()}${pad2(dt.getMonth() + 1)}${pad2(dt.getDate())}T${pad2(dt.getHours())}${pad2(dt.getMinutes())}00`;
-  const summary = 'Перманентный макияж: ' + serviceName;
-  const description = 'Студия перманентного макияжа. Услуга: ' + serviceName + (data.notes ? ('. Заметка: ' + data.notes) : '');
-  const ics = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//PMU Studio//Booking//RU',
-    'CALSCALE:GREGORIAN',
-    'BEGIN:VEVENT',
-    'UID:' + 'pmu-' + Date.now() + '@pmu-booking',
-    'DTSTAMP:' + fmt(new Date()),
-    'DTSTART:' + fmt(start),
-    'DTEND:' + fmt(end),
-    'SUMMARY:' + icsEscape(summary),
-    'DESCRIPTION:' + icsEscape(description),
-    'END:VEVENT',
-    'END:VCALENDAR'
-  ].join('\r\n');
-  return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-}
 
 function render() {
   const app = document.getElementById('app');
@@ -185,10 +152,9 @@ function render() {
       <div class="success-card">
         <p class="success-title">Заявка отправлена</p>
         <p class="success-body">Мастер свяжется с вами, чтобы подтвердить дату и время.</p>
-        ${lastBooking ? `<a class="btn-calendar" href="${buildCalendarLink(lastBooking)}" target="_blank" rel="noopener">📅 Добавить в календарь</a>` : ''}
-        <button class="btn-primary" style="margin-top:10px;" id="new-booking-btn">Записаться ещё раз</button>
+        <button class="btn-primary" style="margin-top:0;" id="new-booking-btn">Записаться ещё раз</button>
       </div>`;
-    document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; lastBooking = null; render(); });
+    document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; render(); });
     return;
   }
 
@@ -203,7 +169,7 @@ function render() {
       <label class="field-label">Услуга</label>
       ${services.length === 0
         ? `<div style="font-size:13.5px; color:#A6968D;">Пока нет доступных услуг. Свяжитесь с мастером напрямую.</div>`
-        : `<select name="serviceId" required>${serviceOptions}</select>`}
+        : `<select name="serviceId" id="service-input" required>${serviceOptions}</select>`}
 
       <label class="field-label">Желаемая дата</label>
       <div class="date-field">
@@ -236,6 +202,8 @@ function render() {
   if (form) form.addEventListener('submit', onSubmit);
   const dateInput = document.getElementById('date-input');
   if (dateInput) dateInput.addEventListener('change', onDateChange);
+  const serviceInput = document.getElementById('service-input');
+  if (serviceInput) serviceInput.addEventListener('change', updateTimeOptions);
   const phoneInput = document.getElementById('phone-input');
   if (phoneInput) phoneInput.addEventListener('blur', onPhoneBlur);
 }
@@ -266,6 +234,7 @@ function onDateChange(e) {
   }
   const box = document.getElementById('busy-times');
   const timeSelect = document.getElementById('time-input');
+  currentBusyRanges = [];
   if (!date) {
     timeSelect.innerHTML = '<option value="">Сначала выберите дату</option>';
     timeSelect.disabled = true;
@@ -276,25 +245,62 @@ function onDateChange(e) {
   timeSelect.innerHTML = '<option value="">Загрузка…</option>';
   box.textContent = '';
   db.collection('appointments').where('date', '==', date).get().then(snap => {
-    const busy = new Set(
-      snap.docs.map(d => d.data()).filter(a => a.status !== 'cancelled').map(a => a.time)
-    );
-    const free = TIME_SLOTS.filter(t => !busy.has(t));
-    if (free.length === 0) {
-      timeSelect.innerHTML = '<option value="">Нет свободного времени на этот день</option>';
-      timeSelect.disabled = true;
-      box.textContent = 'На этот день все места заняты — выберите другую дату.';
-      return;
-    }
-    timeSelect.innerHTML = '<option value="">Выберите время</option>' +
-      free.map(t => `<option value="${t}">${t}</option>`).join('');
-    timeSelect.disabled = false;
-    box.textContent = '';
+    currentBusyRanges = snap.docs
+      .map(d => d.data())
+      .filter(a => a.status !== 'cancelled')
+      .map(a => {
+        const svc = services.find(s => s.id === a.serviceId);
+        const dur = svc && svc.duration ? Number(svc.duration) : 60;
+        const start = minutesFromTime(a.time);
+        return { start, end: start + dur };
+      });
+    updateTimeOptions();
   }).catch(() => {
     timeSelect.innerHTML = '<option value="">Не удалось загрузить время</option>';
     timeSelect.disabled = true;
     box.textContent = 'Не удалось проверить занятость — попробуйте выбрать дату ещё раз.';
   });
+}
+
+function minutesFromTime(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function getSelectedServiceDuration() {
+  const serviceInput = document.getElementById('service-input');
+  if (!serviceInput) return 60;
+  const svc = services.find(s => s.id === serviceInput.value);
+  return svc && svc.duration ? Number(svc.duration) : 60;
+}
+
+function updateTimeOptions() {
+  const dateInput = document.getElementById('date-input');
+  const timeSelect = document.getElementById('time-input');
+  const box = document.getElementById('busy-times');
+  if (!dateInput.value) return;
+  const duration = getSelectedServiceDuration();
+  const workEndMin = minutesFromTime(WORK_END);
+  const previouslySelected = timeSelect.value;
+
+  const free = TIME_SLOTS.filter(t => {
+    const start = minutesFromTime(t);
+    const end = start + duration;
+    if (end > workEndMin) return false;
+    return !currentBusyRanges.some(r => start < r.end && end > r.start);
+  });
+
+  if (free.length === 0) {
+    timeSelect.innerHTML = '<option value="">Нет свободного времени на этот день</option>';
+    timeSelect.disabled = true;
+    box.textContent = 'На этот день нет подходящего окна для этой услуги — выберите другую дату или услугу.';
+    return;
+  }
+  timeSelect.innerHTML = '<option value="">Выберите время</option>' +
+    free.map(t => `<option value="${t}">${t}</option>`).join('');
+  timeSelect.disabled = false;
+  if (free.includes(previouslySelected)) timeSelect.value = previouslySelected;
+  box.textContent = '';
 }
 
 function onSubmit(e) {
@@ -320,12 +326,23 @@ function onSubmit(e) {
 
   db.collection('appointments')
     .where('date', '==', data.date)
-    .where('time', '==', data.time)
     .get()
     .then(snap => {
-      const taken = snap.docs.some(d => d.data().status !== 'cancelled');
+      const svc = services.find(s => s.id === data.serviceId);
+      const duration = svc && svc.duration ? Number(svc.duration) : 60;
+      const newStart = minutesFromTime(data.time);
+      const newEnd = newStart + duration;
+      const taken = snap.docs.some(d => {
+        const a = d.data();
+        if (a.status === 'cancelled') return false;
+        const otherSvc = services.find(s => s.id === a.serviceId);
+        const otherDuration = otherSvc && otherSvc.duration ? Number(otherSvc.duration) : 60;
+        const otherStart = minutesFromTime(a.time);
+        const otherEnd = otherStart + otherDuration;
+        return newStart < otherEnd && newEnd > otherStart;
+      });
       if (taken) {
-        errBox.textContent = 'Это время уже заняли — выберите другое.';
+        errBox.textContent = 'Это время уже занято другой записью — выберите другое.';
         errBox.style.display = 'block';
         submitBtn.disabled = false;
         onDateChange({ target: { value: data.date } });
@@ -337,8 +354,6 @@ function onSubmit(e) {
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         ...data
       }).then(() => {
-        const svc = services.find(s => s.id === data.serviceId);
-        lastBooking = { data, serviceName: svc ? svc.name : 'Процедура', duration: svc ? svc.duration : null };
         submitted = true;
         render();
       });
