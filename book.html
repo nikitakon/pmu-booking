@@ -36,6 +36,19 @@
     background: var(--surface-raised); color: var(--text); font-family: 'Work Sans', sans-serif;
   }
   input[type="date"] { min-height: 44px; line-height: 1.3; }
+  .date-field { position: relative; }
+  .date-field-display {
+    display: flex; align-items: center; width: 100%; min-height: 44px; box-sizing: border-box;
+    border: 1px solid var(--hairline); border-radius: 7px; padding: 11px 12px; font-size: 16px;
+    background: var(--surface-raised); color: var(--text); font-family: 'Work Sans', sans-serif;
+  }
+  .date-field-display.placeholder { color: #6B5D56; }
+  .date-field-display::after {
+    content: '📅'; margin-left: auto; opacity: 0.7; font-size: 14px;
+  }
+  .date-field input[type="date"] {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0; border: none;
+  }
   input[type="date"]::-webkit-datetime-edit,
   input[type="date"]::-webkit-datetime-edit-fields-wrapper,
   input[type="date"]::-webkit-datetime-edit-text,
@@ -99,6 +112,10 @@ function todayStr() {
   const d = new Date();
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+function formatDateHuman(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 let services = [];
@@ -189,7 +206,10 @@ function render() {
         : `<select name="serviceId" required>${serviceOptions}</select>`}
 
       <label class="field-label">Желаемая дата</label>
-      <input type="date" name="date" id="date-input" min="${todayStr()}" required />
+      <div class="date-field">
+        <span class="date-field-display placeholder" id="date-display">Выберите дату</span>
+        <input type="date" name="date" id="date-input" min="${todayStr()}" required />
+      </div>
 
       <label class="field-label">Желаемое время</label>
       <select name="time" id="time-input" required disabled>
@@ -238,9 +258,14 @@ function onPhoneBlur(e) {
 }
 
 function onDateChange(e) {
+  const date = e.target.value;
+  const display = document.getElementById('date-display');
+  if (display) {
+    if (date) { display.textContent = formatDateHuman(date); display.classList.remove('placeholder'); }
+    else { display.textContent = 'Выберите дату'; display.classList.add('placeholder'); }
+  }
   const box = document.getElementById('busy-times');
   const timeSelect = document.getElementById('time-input');
-  const date = e.target.value;
   if (!date) {
     timeSelect.innerHTML = '<option value="">Сначала выберите дату</option>';
     timeSelect.disabled = true;
