@@ -47,6 +47,18 @@
   .icon-btn, .link-btn { border: 1px solid var(--hairline); background: var(--surface); color: var(--text); border-radius: 7px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; }
   .link-btn { width: auto; border: none; background: none; color: var(--accent); font-weight: 500; font-size: 13px; padding: 4px 6px; }
   input[type="date"] { border: 1px solid var(--hairline); border-radius: 7px; padding: 6px 8px; font-size: 13px; color: var(--text-secondary); background: var(--surface); }
+  input[type="date"]::-webkit-datetime-edit,
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+  input[type="date"]::-webkit-datetime-edit-text,
+  input[type="date"]::-webkit-datetime-edit-month-field,
+  input[type="date"]::-webkit-datetime-edit-day-field,
+  input[type="date"]::-webkit-datetime-edit-year-field {
+    color: var(--text) !important;
+    opacity: 1 !important;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.75);
+  }
   .stats-row { display: flex; gap: 12px; margin-bottom: 22px; }
   .stat-card { flex: 1; background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; padding: 14px 16px; }
   .stat-label { font-size: 12.5px; color: var(--text-muted); }
