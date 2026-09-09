@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark" />
 <title>Студия перманентного макияжа — панель мастера</title>
+<link rel="manifest" href="manifest-master.json" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Ohiliza" />
+<meta name="theme-color" content="#14100D" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -238,8 +244,14 @@ if (db) {
 }
 
 /* ---------- derived data ---------- */
+function getActiveAppointments() {
+  return state.appointments.filter(a => !a.archived);
+}
+function getArchivedAppointments() {
+  return state.appointments.filter(a => a.archived).sort((a, b) => b.date === a.date ? b.time.localeCompare(a.time) : b.date.localeCompare(a.date));
+}
 function getDayAppointments() {
-  return state.appointments.filter(a => a.date === state.selectedDate).sort((a, b) => a.time.localeCompare(b.time));
+  return getActiveAppointments().filter(a => a.date === state.selectedDate).sort((a, b) => a.time.localeCompare(b.time));
 }
 function getDayRevenue(list) {
   return list.filter(a => a.status !== 'cancelled').reduce((sum, a) => {
@@ -249,13 +261,13 @@ function getDayRevenue(list) {
 }
 function getTodayReminders() {
   const today = todayStr();
-  return state.appointments
+  return getActiveAppointments()
     .filter(a => a.reminderDate === today && a.status !== 'cancelled')
     .sort((a, b) => a.time.localeCompare(b.time));
 }
 function getClients() {
   const map = new Map();
-  for (const a of state.appointments) {
+  for (const a of getActiveAppointments()) {
     const key = (a.phone || '').trim() || (a.clientName || '').trim().toLowerCase();
     if (!map.has(key)) map.set(key, { key, name: a.clientName, phone: a.phone, visits: [] });
     map.get(key).visits.push(a);
@@ -284,7 +296,7 @@ function daysBetween(dateStr1, dateStr2) {
   return Math.round((d2 - d1) / 86400000);
 }
 function getStatsForMonth(monthStr) {
-  const inMonth = state.appointments.filter(a => a.date && a.date.startsWith(monthStr));
+  const inMonth = getActiveAppointments().filter(a => a.date && a.date.startsWith(monthStr));
   const done = inMonth.filter(a => a.status === 'done');
   const revenue = done.reduce((sum, a) => {
     const svc = state.services.find(s => s.id === a.serviceId);
@@ -331,9 +343,10 @@ function render() {
       <button class="tab-btn ${state.tab === 'clients' ? 'active' : ''}" data-action="tab" data-tab="clients">Клиенты</button>
       <button class="tab-btn ${state.tab === 'stats' ? 'active' : ''}" data-action="tab" data-tab="stats">Статистика</button>
       <button class="tab-btn ${state.tab === 'services' ? 'active' : ''}" data-action="tab" data-tab="services">Услуги и цены</button>
+      <button class="tab-btn ${state.tab === 'archive' ? 'active' : ''}" data-action="tab" data-tab="archive">Архив</button>
     </nav>
     ${renderReminders()}
-    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : state.tab === 'stats' ? renderStats() : renderServices()}</main>
+    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : state.tab === 'stats' ? renderStats() : state.tab === 'archive' ? renderArchive() : renderServices()}</main>
   `;
   attachListeners();
 }
@@ -407,7 +420,7 @@ function renderApptRow(a) {
           ${a.status !== 'done' ? `<button class="text-action" data-action="set-status" data-id="${a.id}" data-status="done">Выполнено</button>` : ''}
           ${a.status !== 'cancelled' ? `<button class="text-action" data-action="set-status" data-id="${a.id}" data-status="cancelled">Отменить</button>` : ''}
           <button class="text-action" data-action="edit-appt" data-id="${a.id}">Изменить</button>
-          <button class="text-action" data-action="delete-appt" data-id="${a.id}">Удалить</button>
+          <button class="text-action" data-action="delete-appt" data-id="${a.id}">В архив</button>
         </div>
       </div>
     </div>
@@ -527,6 +540,34 @@ function renderStats() {
   `;
 }
 
+function renderArchive() {
+  const archived = getArchivedAppointments();
+  if (archived.length === 0) {
+    return `<div class="empty-state"><p class="empty-title">Архив пуст</p><p class="empty-body">Удалённые записи попадают сюда — их можно восстановить или удалить навсегда.</p></div>`;
+  }
+  return archived.map(a => {
+    const svc = state.services.find(s => s.id === a.serviceId);
+    const meta = STATUS_META[a.status] || STATUS_META.planned;
+    return `
+      <div class="appt-row" style="border-left-color:${meta.color};">
+        <div class="appt-time">${esc(new Date(a.date + 'T00:00:00').toLocaleDateString('ru-RU'))}<br>${esc(a.time)}</div>
+        <div class="appt-main">
+          <div class="appt-client">${esc(a.clientName)}</div>
+          <div class="appt-detail">${svc ? esc(svc.name) + ' · ' + formatMoney(svc.price) : 'Услуга удалена'}</div>
+          ${a.phone ? `<div class="appt-detail-muted">${esc(a.phone)}</div>` : ''}
+        </div>
+        <div class="appt-right">
+          <span class="status-pill" style="color:${meta.color}; background:${meta.bg};">${meta.label}</span>
+          <div class="appt-actions">
+            <button class="text-action" data-action="restore-appt" data-id="${a.id}">Восстановить</button>
+            <button class="text-action" data-action="delete-forever" data-id="${a.id}">Удалить навсегда</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderServices() {
   return `
     ${(!state.showServiceForm && !state.editingServiceId) ? `<button class="btn-primary" data-action="show-add-service">+ Новая услуга</button>` : ''}
@@ -599,7 +640,9 @@ function onClick(e) {
   else if (action === 'show-add-appt') { state.editingApptId = null; state.showAddForm = true; render(); }
   else if (action === 'cancel-appt-form') { state.showAddForm = false; state.editingApptId = null; render(); }
   else if (action === 'edit-appt') { state.showAddForm = false; state.editingApptId = el.dataset.id; render(); }
-  else if (action === 'delete-appt') { db.collection('appointments').doc(el.dataset.id).delete(); }
+  else if (action === 'delete-appt') { db.collection('appointments').doc(el.dataset.id).update({ archived: true, archivedAt: firebase.firestore.FieldValue.serverTimestamp() }); }
+  else if (action === 'restore-appt') { db.collection('appointments').doc(el.dataset.id).update({ archived: false }); }
+  else if (action === 'delete-forever') { if (confirm('Удалить запись навсегда? Это действие нельзя отменить.')) db.collection('appointments').doc(el.dataset.id).delete(); }
   else if (action === 'set-status') { db.collection('appointments').doc(el.dataset.id).update({ status: el.dataset.status }); }
   else if (action === 'dismiss-reminder') { db.collection('appointments').doc(el.dataset.id).update({ reminderDate: null }); }
   else if (action === 'toggle-client') { state.expandedClientKey = state.expandedClientKey === el.dataset.key ? null : el.dataset.key; render(); }

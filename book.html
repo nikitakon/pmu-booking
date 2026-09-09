@@ -4,7 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark" />
-<title>Запись — Студия перманентного макияжа</title>
+<title>Запись на процедуру — Ohiliza</title>
+
+<!-- Превью ссылки в Instagram/Telegram/WhatsApp и т.д. -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Ohiliza — запись на процедуру" />
+<meta property="og:description" content="Студия перманентного макияжа. Выберите услугу, дату и время онлайн." />
+<meta property="og:image" content="https://nikitakon.github.io/pmu-booking/og-image.jpg" />
+<meta property="og:url" content="https://nikitakon.github.io/pmu-booking/book.html" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<!-- Иконка при добавлении на главный экран телефона -->
+<link rel="manifest" href="manifest-book.json" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Ohiliza" />
+<meta name="theme-color" content="#14100D" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -88,6 +104,7 @@
 
 <script>
 /* Вставьте те же данные, что и в index.html — тот же проект Firebase */
+const MASTER_NAME = "Ohiliza";
 const firebaseConfig = {
   apiKey: "AIzaSyAt0TRdJbH-O3pM84fSRuqW56ajvrvFCsw",
   authDomain: "pmu-booking-ba795.firebaseapp.com",
@@ -151,7 +168,7 @@ function render() {
     app.innerHTML = `
       <div class="success-card">
         <p class="success-title">Заявка отправлена</p>
-        <p class="success-body">Мастер свяжется с вами, чтобы подтвердить дату и время.</p>
+        <p class="success-body">${esc(MASTER_NAME)} будет ждать вас!</p>
         <button class="btn-primary" style="margin-top:0;" id="new-booking-btn">Записаться ещё раз</button>
       </div>`;
     document.getElementById('new-booking-btn').addEventListener('click', () => { submitted = false; render(); });
