@@ -100,7 +100,8 @@ function render() {
         : `<select name="serviceId" required>${serviceOptions}</select>`}
 
       <label class="field-label">Желаемая дата</label>
-      <input type="date" name="date" min="${todayStr()}" required />
+      <input type="date" name="date" id="date-input" min="${todayStr()}" required />
+      <div id="busy-times" style="font-size:12.5px; color:#8A7570; margin-top:6px;"></div>
 
       <label class="field-label">Желаемое время</label>
       <input type="time" name="time" required />
@@ -121,6 +122,23 @@ function render() {
 
   const form = document.getElementById('book-form');
   if (form) form.addEventListener('submit', onSubmit);
+  const dateInput = document.getElementById('date-input');
+  if (dateInput) dateInput.addEventListener('change', onDateChange);
+}
+
+function onDateChange(e) {
+  const box = document.getElementById('busy-times');
+  const date = e.target.value;
+  if (!date) { box.textContent = ''; return; }
+  box.textContent = 'Проверяю занятые часы…';
+  db.collection('appointments').where('date', '==', date).get().then(snap => {
+    const busy = snap.docs
+      .map(d => d.data())
+      .filter(a => a.status !== 'cancelled')
+      .map(a => a.time)
+      .sort();
+    box.textContent = busy.length ? `Занято на этот день: ${busy.join(', ')}` : 'На этот день пока всё свободно';
+  }).catch(() => { box.textContent = ''; });
 }
 
 function onSubmit(e) {
@@ -141,19 +159,38 @@ function onSubmit(e) {
     return;
   }
   errBox.style.display = 'none';
-  db.collection('appointments').add({
-    status: 'planned',
-    source: 'client',
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    ...data
-  }).then(() => {
-    submitted = true;
-    render();
-  }).catch(err => {
-    errBox.textContent = 'Не удалось отправить заявку. Попробуйте ещё раз.';
-    errBox.style.display = 'block';
-    console.error(err);
-  });
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+
+  db.collection('appointments')
+    .where('date', '==', data.date)
+    .where('time', '==', data.time)
+    .get()
+    .then(snap => {
+      const taken = snap.docs.some(d => d.data().status !== 'cancelled');
+      if (taken) {
+        errBox.textContent = 'Это время уже заняли — выберите другое.';
+        errBox.style.display = 'block';
+        submitBtn.disabled = false;
+        onDateChange({ target: { value: data.date } });
+        return;
+      }
+      return db.collection('appointments').add({
+        status: 'planned',
+        source: 'client',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        ...data
+      }).then(() => {
+        submitted = true;
+        render();
+      });
+    })
+    .catch(err => {
+      errBox.textContent = 'Не удалось отправить заявку. Попробуйте ещё раз.';
+      errBox.style.display = 'block';
+      submitBtn.disabled = false;
+      console.error(err);
+    });
 }
 
 if (CONFIG_IS_SET) {
