@@ -111,6 +111,29 @@
   .reminder-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
   .reminder-dismiss { background: none; border: 1px solid var(--hairline); color: var(--text-secondary); border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; font-family: 'Work Sans', sans-serif; }
   .reminder-date-input { border: 1px solid var(--hairline); border-radius: 7px; padding: 10px 11px; font-size: 14px; background: var(--surface-raised); color: var(--text); font-family: 'Work Sans', sans-serif; width: 100%; }
+  .sort-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .sort-label { font-size: 12.5px; color: var(--text-muted); }
+  .sort-btn { background: none; border: 1px solid var(--hairline); color: var(--text-muted); border-radius: 20px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; font-family: 'Work Sans', sans-serif; }
+  .sort-btn.active { color: var(--accent); border-color: var(--accent-strong); }
+  .client-tag { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .client-tag-regular { color: var(--success); background: var(--success-wash); }
+  .client-tag-absence { color: var(--warn); background: var(--warn-wash); }
+  .stats-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stats-header input[type="month"] { width: auto; border: 1px solid var(--hairline); border-radius: 7px; padding: 8px 10px; font-size: 14px; background: var(--surface); color: var(--text); font-family: 'Work Sans', sans-serif; }
+  .stats-month-label { font-family: 'Fraunces', serif; font-style: italic; font-size: 17px; text-transform: capitalize; color: var(--text); }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stats-section-title { font-family: 'Fraunces', serif; font-style: italic; font-size: 16px; margin: 0 0 14px; }
+  .service-bars { display: flex; flex-direction: column; gap: 16px; }
+  .service-bar-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; margin-bottom: 6px; }
+  .service-bar-name { color: var(--text); }
+  .service-bar-value { color: var(--text-muted); white-space: nowrap; }
+  .service-bar-track { background: var(--hairline-soft); border-radius: 20px; height: 8px; overflow: hidden; }
+  .service-bar-fill { background: var(--accent-strong); height: 100%; border-radius: 20px; }
+  @media (max-width: 560px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .wa-link { color: var(--success); font-weight: 500; text-decoration: none; }
+  .wa-link:hover { text-decoration: underline; }
+  .appt-contact { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .client-contact { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 16px 14px; margin-top: -6px; }
   ::placeholder { color: #6B5D56; }
   @media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } .appt-row, .service-row { flex-wrap: wrap; } }
 </style>
@@ -159,6 +182,14 @@ function formatDateHuman(dateStr) {
 }
 function formatMoney(n) { return (Number(n) || 0).toLocaleString('ru-RU') + ' грн'; }
 function esc(s) { const d = document.createElement('div'); d.innerText = s == null ? '' : s; return d.innerHTML; }
+function waLink(phone) {
+  if (!phone) return null;
+  let digits = String(phone).replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.startsWith('0')) digits = '380' + digits.slice(1);
+  else if (digits.length === 9) digits = '380' + digits;
+  return `https://wa.me/${digits}`;
+}
 
 const STATUS_META = {
   planned: { label: 'Запланировано', color: '#C07B8A', bg: '#2B1B1F' },
@@ -177,6 +208,8 @@ let state = {
   expandedClientKey: null,
   showServiceForm: false,
   editingServiceId: null,
+  statsMonth: todayStr().slice(0, 7),
+  clientSort: 'recent',
 };
 
 /* ---------- Firestore live sync ---------- */
@@ -215,14 +248,53 @@ function getClients() {
     if (!map.has(key)) map.set(key, { key, name: a.clientName, phone: a.phone, visits: [] });
     map.get(key).visits.push(a);
   }
-  return Array.from(map.values()).map(c => {
+  const today = todayStr();
+  const list = Array.from(map.values()).map(c => {
     const sorted = [...c.visits].sort((a, b) => b.date === a.date ? b.time.localeCompare(a.time) : b.date.localeCompare(a.date));
+    const activeVisits = c.visits.filter(v => v.status !== 'cancelled');
     const revenue = c.visits.filter(v => v.status === 'done').reduce((sum, v) => {
       const svc = state.services.find(s => s.id === v.serviceId);
       return sum + (svc ? Number(svc.price) || 0 : 0);
     }, 0);
-    return { ...c, visits: sorted, lastVisit: sorted[0], revenue };
-  }).sort((a, b) => b.lastVisit.date.localeCompare(a.lastVisit.date));
+    const lastVisit = sorted[0];
+    const daysSinceLast = lastVisit ? daysBetween(lastVisit.date, today) : null;
+    const isRegular = activeVisits.length >= 3;
+    const isLongAbsence = lastVisit && lastVisit.date < today && daysSinceLast !== null && daysSinceLast > 60;
+    return { ...c, visits: sorted, lastVisit, revenue, visitCount: activeVisits.length, isRegular, isLongAbsence };
+  });
+  if (state.clientSort === 'revenue') return list.sort((a, b) => b.revenue - a.revenue);
+  if (state.clientSort === 'visits') return list.sort((a, b) => b.visitCount - a.visitCount);
+  return list.sort((a, b) => b.lastVisit.date.localeCompare(a.lastVisit.date));
+}
+function daysBetween(dateStr1, dateStr2) {
+  const d1 = new Date(dateStr1 + 'T00:00:00');
+  const d2 = new Date(dateStr2 + 'T00:00:00');
+  return Math.round((d2 - d1) / 86400000);
+}
+function getStatsForMonth(monthStr) {
+  const inMonth = state.appointments.filter(a => a.date && a.date.startsWith(monthStr));
+  const done = inMonth.filter(a => a.status === 'done');
+  const revenue = done.reduce((sum, a) => {
+    const svc = state.services.find(s => s.id === a.serviceId);
+    return sum + (svc ? Number(svc.price) || 0 : 0);
+  }, 0);
+  const clientKeys = new Set(done.map(a => (a.phone || '').trim() || (a.clientName || '').trim().toLowerCase()));
+  const avgCheck = done.length ? Math.round(revenue / done.length) : 0;
+  const cancelledCount = inMonth.filter(a => a.status === 'cancelled').length;
+
+  const serviceMap = new Map();
+  for (const a of done) {
+    const svc = state.services.find(s => s.id === a.serviceId);
+    const name = svc ? svc.name : 'Услуга удалена';
+    const price = svc ? Number(svc.price) || 0 : 0;
+    if (!serviceMap.has(name)) serviceMap.set(name, { name, count: 0, revenue: 0 });
+    const entry = serviceMap.get(name);
+    entry.count += 1;
+    entry.revenue += price;
+  }
+  const topServices = Array.from(serviceMap.values()).sort((a, b) => b.revenue - a.revenue);
+
+  return { visitsDone: done.length, revenue, clientCount: clientKeys.size, avgCheck, cancelledCount, topServices };
 }
 
 /* ---------- render ---------- */
@@ -245,10 +317,11 @@ function render() {
     <nav class="tabs">
       <button class="tab-btn ${state.tab === 'today' ? 'active' : ''}" data-action="tab" data-tab="today">Сегодня</button>
       <button class="tab-btn ${state.tab === 'clients' ? 'active' : ''}" data-action="tab" data-tab="clients">Клиенты</button>
+      <button class="tab-btn ${state.tab === 'stats' ? 'active' : ''}" data-action="tab" data-tab="stats">Статистика</button>
       <button class="tab-btn ${state.tab === 'services' ? 'active' : ''}" data-action="tab" data-tab="services">Услуги и цены</button>
     </nav>
     ${renderReminders()}
-    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : renderServices()}</main>
+    <main>${state.tab === 'today' ? renderToday() : state.tab === 'clients' ? renderClients() : state.tab === 'stats' ? renderStats() : renderServices()}</main>
   `;
   attachListeners();
 }
@@ -264,7 +337,7 @@ function renderReminders() {
         return `
           <div class="reminder-row">
             <div class="reminder-main">
-              <b>${esc(a.clientName)}</b>${a.phone ? ' · ' + esc(a.phone) : ''}
+              <b>${esc(a.clientName)}</b>${a.phone ? ' · ' + esc(a.phone) : ''}${waLink(a.phone) ? ` · <a href="${waLink(a.phone)}" target="_blank" rel="noopener" class="wa-link">💬 WhatsApp</a>` : ''}
               <div class="reminder-sub">Запись: ${esc(new Date(a.date + 'T00:00:00').toLocaleDateString('ru-RU'))} в ${esc(a.time)}${svc ? ' · ' + esc(svc.name) : ''}</div>
             </div>
             <button class="reminder-dismiss" data-action="dismiss-reminder" data-id="${a.id}">Напомнил(а)</button>
@@ -311,7 +384,7 @@ function renderApptRow(a) {
       <div class="appt-main">
         <div class="appt-client">${esc(a.clientName)}</div>
         <div class="appt-detail">${svc ? esc(svc.name) + ' · ' + formatMoney(svc.price) : 'Услуга удалена'}</div>
-        ${a.phone ? `<div class="appt-detail-muted">${esc(a.phone)}</div>` : ''}
+        ${a.phone ? `<div class="appt-detail-muted appt-contact">${esc(a.phone)}${waLink(a.phone) ? ` · <a href="${waLink(a.phone)}" target="_blank" rel="noopener" class="wa-link">💬 WhatsApp</a>` : ''}</div>` : ''}
         ${a.notes ? `<div class="appt-notes">${esc(a.notes)}</div>` : ''}
         ${a.source === 'client' ? `<div class="appt-detail-muted">Заявка с сайта</div>` : ''}
         ${a.reminderDate ? `<div class="appt-detail-muted">🔔 Напомнить: ${esc(new Date(a.reminderDate + 'T00:00:00').toLocaleDateString('ru-RU'))}</div>` : ''}
@@ -364,8 +437,16 @@ function renderApptForm() {
 
 function renderClients() {
   const clients = getClients();
+  const sortControls = `
+    <div class="sort-row">
+      <span class="sort-label">Сортировать:</span>
+      <button class="sort-btn ${state.clientSort === 'recent' ? 'active' : ''}" data-action="sort-clients" data-sort="recent">По визиту</button>
+      <button class="sort-btn ${state.clientSort === 'revenue' ? 'active' : ''}" data-action="sort-clients" data-sort="revenue">По доходу</button>
+      <button class="sort-btn ${state.clientSort === 'visits' ? 'active' : ''}" data-action="sort-clients" data-sort="visits">По визитам</button>
+    </div>
+  `;
   if (clients.length === 0) return `<div class="empty-state"><p class="empty-title">Клиентов пока нет</p><p class="empty-body">Они появятся здесь после первой записи.</p></div>`;
-  return clients.map(c => {
+  return sortControls + clients.map(c => {
     const open = state.expandedClientKey === c.key;
     return `
       <div class="client-card">
@@ -373,11 +454,16 @@ function renderClients() {
           <div class="client-avatar">${esc((c.name || '?').trim().slice(0,1).toUpperCase() || '?')}</div>
           <div style="flex:1;">
             <div class="client-name">${esc(c.name)}</div>
-            <div class="appt-detail-muted">${c.phone ? esc(c.phone) + ' · ' : ''}${c.visits.length} ${c.visits.length === 1 ? 'визит' : 'визита(ов)'}</div>
+            <div class="appt-detail-muted">${c.visitCount} ${c.visitCount === 1 ? 'визит' : 'визита(ов)'}</div>
+            ${c.isRegular || c.isLongAbsence ? `<div style="margin-top:5px; display:flex; gap:6px; flex-wrap:wrap;">
+              ${c.isRegular ? `<span class="client-tag client-tag-regular">Постоянный клиент</span>` : ''}
+              ${c.isLongAbsence ? `<span class="client-tag client-tag-absence">Давно не был</span>` : ''}
+            </div>` : ''}
           </div>
           <div class="client-revenue">${formatMoney(c.revenue)}</div>
           <span style="opacity:.5;">${open ? '▲' : '▼'}</span>
         </button>
+        ${c.phone ? `<div class="client-contact"><span class="appt-detail-muted">${esc(c.phone)}</span>${waLink(c.phone) ? `<a href="${waLink(c.phone)}" target="_blank" rel="noopener" class="wa-link">💬 Написать в WhatsApp</a>` : ''}</div>` : ''}
         ${open ? `<div class="client-history">${c.visits.map(v => {
           const svc = state.services.find(s => s.id === v.serviceId);
           const meta = STATUS_META[v.status] || STATUS_META.planned;
@@ -391,6 +477,42 @@ function renderClients() {
       </div>
     `;
   }).join('');
+}
+
+function monthLabel(monthStr) {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1, 1);
+  return d.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+
+function renderStats() {
+  const stats = getStatsForMonth(state.statsMonth);
+  const maxServiceRevenue = stats.topServices.length ? stats.topServices[0].revenue : 0;
+  return `
+    <div class="stats-header">
+      <input type="month" id="stats-month-picker" value="${state.statsMonth}" />
+      <div class="stats-month-label">${esc(monthLabel(state.statsMonth))}</div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Выручка</div><div class="stat-value">${formatMoney(stats.revenue)}</div></div>
+      <div class="stat-card"><div class="stat-label">Визитов выполнено</div><div class="stat-value">${stats.visitsDone}</div></div>
+      <div class="stat-card"><div class="stat-label">Клиентов</div><div class="stat-value">${stats.clientCount}</div></div>
+      <div class="stat-card"><div class="stat-label">Средний чек</div><div class="stat-value">${formatMoney(stats.avgCheck)}</div></div>
+    </div>
+    ${stats.cancelledCount > 0 ? `<div class="appt-detail-muted" style="margin-bottom:20px;">Отменённых записей за месяц: ${stats.cancelledCount}</div>` : ''}
+    <p class="stats-section-title">Топ услуг за месяц</p>
+    ${stats.topServices.length === 0
+      ? `<div class="empty-state"><p class="empty-title">Пока нет данных</p><p class="empty-body">Здесь появится топ услуг, когда в этом месяце будут выполненные записи.</p></div>`
+      : `<div class="service-bars">${stats.topServices.map(s => `
+          <div class="service-bar-row">
+            <div class="service-bar-top">
+              <span class="service-bar-name">${esc(s.name)}</span>
+              <span class="service-bar-value">${formatMoney(s.revenue)} · ${s.count} ${s.count === 1 ? 'раз' : 'раз(а)'}</span>
+            </div>
+            <div class="service-bar-track"><div class="service-bar-fill" style="width:${maxServiceRevenue ? Math.round((s.revenue / maxServiceRevenue) * 100) : 0}%;"></div></div>
+          </div>
+        `).join('')}</div>`}
+  `;
 }
 
 function renderServices() {
@@ -444,6 +566,8 @@ function attachListeners() {
   const app = document.getElementById('app');
   const datePicker = document.getElementById('date-picker');
   if (datePicker) datePicker.addEventListener('change', e => { state.selectedDate = e.target.value; render(); });
+  const statsMonthPicker = document.getElementById('stats-month-picker');
+  if (statsMonthPicker) statsMonthPicker.addEventListener('change', e => { if (e.target.value) { state.statsMonth = e.target.value; render(); } });
   app.addEventListener('click', onClick);
   const apptForm = document.getElementById('appt-form');
   if (apptForm) apptForm.addEventListener('submit', onApptSubmit);
@@ -467,6 +591,7 @@ function onClick(e) {
   else if (action === 'set-status') { db.collection('appointments').doc(el.dataset.id).update({ status: el.dataset.status }); }
   else if (action === 'dismiss-reminder') { db.collection('appointments').doc(el.dataset.id).update({ reminderDate: null }); }
   else if (action === 'toggle-client') { state.expandedClientKey = state.expandedClientKey === el.dataset.key ? null : el.dataset.key; render(); }
+  else if (action === 'sort-clients') { state.clientSort = el.dataset.sort; render(); }
   else if (action === 'show-add-service') { state.editingServiceId = null; state.showServiceForm = true; render(); }
   else if (action === 'cancel-service-form') { state.showServiceForm = false; state.editingServiceId = null; render(); }
   else if (action === 'edit-service') { state.showServiceForm = false; state.editingServiceId = el.dataset.id; render(); }
