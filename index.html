@@ -786,7 +786,7 @@ function onBlockSubmit(e) {
   const date = fd.get('date');
   const mode = fd.get('mode');
   const note = (fd.get('note') || '').trim();
-  const errBox = document.getElementById('app').addEventListener('click', onClick);
+  const errBox = document.getElementById('block-error');
   if (!date) { errBox.textContent = 'Укажите дату'; errBox.style.display = 'block'; return; }
   const data = { date, note: note || null };
   if (mode === 'hours') {
