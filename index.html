@@ -50,6 +50,8 @@
   .tab-btn.active { color: var(--accent); font-weight: 500; border-bottom-color: var(--accent-strong); }
   .date-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
   .date-human { font-family: 'Fraunces', serif; font-style: italic; font-size: 19px; font-weight: 500; }
+  .date-human-blocked { color: var(--warn); }
+  input#date-picker.date-picker-blocked { border-color: var(--warn); background: var(--warn-wash); color: var(--warn); }
   .icon-btn, .link-btn { border: 1px solid var(--hairline); background: var(--surface); color: var(--text); border-radius: 7px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; }
   .link-btn { width: auto; border: none; background: none; color: var(--accent); font-weight: 500; font-size: 13px; padding: 4px 6px; }
   input[type="date"] { border: 1px solid var(--hairline); border-radius: 7px; padding: 6px 8px; font-size: 13px; color: var(--text-secondary); background: var(--surface); }
@@ -389,8 +391,8 @@ function renderToday() {
     <div class="date-nav">
       <button class="icon-btn" data-action="prev-day" aria-label="Предыдущий день">‹</button>
       <div style="flex:1; display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;">
-        <div class="date-human">${esc(formatDateHuman(state.selectedDate))}</div>
-        <input type="date" id="date-picker" value="${state.selectedDate}" />
+        <div class="date-human ${dayBlock ? 'date-human-blocked' : ''}">${dayBlock ? '🚫 ' : ''}${esc(formatDateHuman(state.selectedDate))}</div>
+        <input type="date" id="date-picker" class="${dayBlock ? 'date-picker-blocked' : ''}" value="${state.selectedDate}" />
       </div>
       <button class="icon-btn" data-action="next-day" aria-label="Следующий день">›</button>
       <button class="link-btn" data-action="today">Сегодня</button>
